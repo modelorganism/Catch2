@@ -34,7 +34,7 @@
 
 namespace Catch {
     
-class XCTestReporter : public StreamingReporterBase {
+class XCTestReporter : public StreamingReporterBase<XCTestReporter> {
 public:
     XCTestReporter (ReporterConfig const &config) : StreamingReporterBase(config) {}
     virtual ~XCTestReporter () {}
@@ -63,7 +63,7 @@ private:
     std::vector<AssertionStats> _collectedAssertions;
 };
 
-class XCTestRegistryHub : public RegistryHub {
+class XCTestRegistryHub : public ITestRegister {
 private:
     /* Keys used to manage our generated XCTestCase subclass' configuration via
      * objc_setAssociatedObject/objc_getAssociatedObject */
@@ -73,12 +73,7 @@ private:
 public:
     XCTestRegistryHub () {}
     
-    /* Generates an XCTest instance that allows Xcode to find and invoke all test cases. */
-    virtual void registerTest( TestCase const& testInfo ) {
-        /* Create a standard registration via our superclass */
-        RegistryHub::registerTest(testInfo);
-        
-        /* Generate a valid class name from the description */
+    void registerWithXCode(const Catch::TestCase &testInfo) {
         const char *description = testInfo.name.c_str();
         NSString *clsName = normalize_identifier([NSString stringWithUTF8String: description]);
         
@@ -130,13 +125,22 @@ public:
         /* Add a test invocation method */
         SEL testSel = register_test_selector(cls, description, _methodImpl_runTest);
         objc_setAssociatedObject(cls, &TestSelectorKey, (__bridge id) (void *) testSel, OBJC_ASSOCIATION_ASSIGN);
-
+        
         /* Register the new class */
         objc_registerClassPair(cls);
-
+        
         /* Attach the test info to the class */
         TestCase *tc = new TestCase(testInfo); // Leaks if the class is deregistered (which is unlikely)
         objc_setAssociatedObject(cls, &TestInfoKey, (__bridge id) tc, OBJC_ASSOCIATION_ASSIGN);
+    }
+    
+    /* Generates an XCTest instance that allows Xcode to find and invoke all test cases. */
+    virtual void registerTest( TestCase const& testInfo ) override {
+        /* Create a standard registration via our superclass */
+        //RegistryHub::registerTest(testInfo);
+        
+        /* Generate a valid class name from the description */
+        registerWithXCode(testInfo);
     }
     
 private:
@@ -168,11 +172,12 @@ private:
         /* Target only our configured test case */
         ConfigData data;
         data.testsOrTags.push_back(testInfo.name);
-        Ptr<IConfig> config = new Config(data);
+        IConfigPtr config { new Config(data)};
         
         /* Set up our run context */
         XCTestReporter* reporter = new XCTestReporter(ReporterConfig(config));
-        RunContext runner(config.get(), reporter);
+        IStreamingReporterPtr u{reporter};
+        RunContext runner(config, std::move(u));
         
         /* Run the test */
         Totals totals;
@@ -266,9 +271,11 @@ private:
                 if (msg[msg.size() - 1] != '.')
                     msg.append(".");
                 
+                //SourceLineInfo sourceLineInfo = result.getSourceInfo();
+                //sourceLineInfo.file;
                 
                 NSString *desc = [NSString stringWithUTF8String: msg.c_str()];
-                NSString *file = [NSString stringWithUTF8String: result.getSourceInfo().file.c_str()];
+                NSString *file = [NSString stringWithUTF8String: result.getSourceInfo().file];
                 
                 [self recordFailureWithDescription: desc inFile: file atLine: result.getSourceInfo().line expected: expected];
             }
@@ -283,7 +290,7 @@ private:
                     msg.append(".");
                 
                 NSString *desc = [NSString stringWithUTF8String: msg.c_str()];
-                NSString *file = [NSString stringWithUTF8String: info.lineInfo.file.c_str()];
+                NSString *file = [NSString stringWithUTF8String: info.lineInfo.file];
                 
                 [self recordFailureWithDescription: desc inFile: file atLine: info.lineInfo.line expected: expected];
             }
@@ -367,10 +374,15 @@ const void *XCTestRegistryHub::TestSelectorKey = NULL;
 + (void) load {
     using namespace Catch;
     
-    RegistryHub **hub = &getTheRegistryHub();
-    RegistryHub *previous = *hub;
+    // Hack to get xc runer funtionality working with singelton stuff
+    addCustomRegistryHub(new XCTestRegistryHub());
+    
+#if 0
+    IMutableRegistryHub **hub = &getMutableRegistryHub();
+    IMutableRegistryHub *previous = *hub;
     *hub = new XCTestRegistryHub();
     delete previous;
+#endif
 }
 
 @end

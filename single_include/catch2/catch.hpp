@@ -1,4 +1,7 @@
+// edited directly, this will need to be cleaned up.
+
 /*
+
  *  Catch v2.4.0
  *  Generated: 2018-09-04 11:55:01.682061
  *  ----------------------------------------------------------
@@ -9120,7 +9123,27 @@ namespace Catch {
 
 #include <vector>
 #include <exception>
+namespace Catch {
+    class ITestRegister {
+    public:
+        virtual void registerTest( Catch::TestCase const& testInfo ) = 0;
+    };
+    extern std::vector<ITestRegister*> registerers;
+    
+    static void addCustomRegistryHub(ITestRegister* r)
+    {
+        registerers.push_back(r);
+    }
+    
+}
+#ifdef  CATCH_CONFIG_RUNNER
+namespace Catch {
+    std::vector<ITestRegister*> registerers{};
+}
+#endif
 
+            
+            
 namespace Catch {
 
     class StartupExceptionRegistry {
@@ -9203,6 +9226,7 @@ namespace Catch {
             }
             void registerTest( TestCase const& testInfo ) override {
                 m_testCaseRegistry.registerTest( testInfo );
+                for(auto registerer :registerers) registerer->registerTest( testInfo );
             }
             void registerTranslator( const IExceptionTranslator* translator ) override {
                 m_exceptionTranslatorRegistry.registerTranslator( translator );
