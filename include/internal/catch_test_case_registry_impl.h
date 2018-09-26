@@ -62,8 +62,12 @@ namespace Catch {
 
     ///////////////////////////////////////////////////////////////////////////
 
-
 } // end namespace Catch
 
+#ifdef  CATCH_CONFIG_RUNNER
+namespace Catch {
+    std::vector<ITestRegistrationListener*> registerers{};
+}
+#endif
 
 #endif // TWOBLUECUBES_CATCH_TEST_CASE_REGISTRY_IMPL_HPP_INCLUDED

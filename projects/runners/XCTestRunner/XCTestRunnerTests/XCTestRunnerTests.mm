@@ -30,7 +30,7 @@
 TEST_CASE("Objective-C Matchers") {
     WHEN("comparing two equal strings") {
         THEN("matching should succeed") {
-            REQUIRE_THAT(@"string1", Equals(@"intentionally fail"));
+            REQUIRE_THAT(@"string1", Catch::Equals(@"intentionally fail"));
         }
     }
 }

@@ -28,13 +28,15 @@
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
 
+#include "internal/catch_run_context.h"
+
 #include <XCTest/XCTest.h>
 #include <inttypes.h>
 #include <objc/message.h>
 
 namespace Catch {
     
-class XCTestReporter : public StreamingReporterBase {
+class XCTestReporter : public StreamingReporterBase<XCTestReporter> {
 public:
     XCTestReporter (ReporterConfig const &config) : StreamingReporterBase(config) {}
     virtual ~XCTestReporter () {}
@@ -63,7 +65,7 @@ private:
     std::vector<AssertionStats> _collectedAssertions;
 };
 
-class XCTestRegistryHub : public RegistryHub {
+class XCTestRegistryHub : public ITestRegistrationListener {
 private:
     /* Keys used to manage our generated XCTestCase subclass' configuration via
      * objc_setAssociatedObject/objc_getAssociatedObject */
@@ -73,12 +75,7 @@ private:
 public:
     XCTestRegistryHub () {}
     
-    /* Generates an XCTest instance that allows Xcode to find and invoke all test cases. */
-    virtual void registerTest( TestCase const& testInfo ) {
-        /* Create a standard registration via our superclass */
-        RegistryHub::registerTest(testInfo);
-        
-        /* Generate a valid class name from the description */
+    void registerWithXCode(const Catch::TestCase &testInfo) {
         const char *description = testInfo.name.c_str();
         NSString *clsName = normalize_identifier([NSString stringWithUTF8String: description]);
         
@@ -139,6 +136,15 @@ public:
         objc_setAssociatedObject(cls, &TestInfoKey, (__bridge id) tc, OBJC_ASSOCIATION_ASSIGN);
     }
     
+    /* Generates an XCTest instance that allows Xcode to find and invoke all test cases. */
+    virtual void registerTest( TestCase const& testInfo ) override {
+        /* Create a standard registration via our superclass */
+        //RegistryHub::registerTest(testInfo);
+        
+        /* Generate a valid class name from the description */
+        registerWithXCode(testInfo);
+    }
+    
 private:
     /* +[XCTestSuite defaultTestSuite] */
     static XCTestSuite *_methodImpl_defaultTestSuite (Class self, SEL _cmd) {
@@ -168,11 +174,12 @@ private:
         /* Target only our configured test case */
         ConfigData data;
         data.testsOrTags.push_back(testInfo.name);
-        Ptr<IConfig> config = new Config(data);
+        IConfigPtr config { new Config(data)};
         
         /* Set up our run context */
         XCTestReporter* reporter = new XCTestReporter(ReporterConfig(config));
-        RunContext runner(config.get(), reporter);
+        IStreamingReporterPtr u{reporter};
+        RunContext runner(config, std::move(u));
         
         /* Run the test */
         Totals totals;
@@ -268,7 +275,7 @@ private:
                 
                 
                 NSString *desc = [NSString stringWithUTF8String: msg.c_str()];
-                NSString *file = [NSString stringWithUTF8String: result.getSourceInfo().file.c_str()];
+                NSString *file = [NSString stringWithUTF8String: result.getSourceInfo().file];
                 
                 [self recordFailureWithDescription: desc inFile: file atLine: result.getSourceInfo().line expected: expected];
             }
@@ -283,7 +290,7 @@ private:
                     msg.append(".");
                 
                 NSString *desc = [NSString stringWithUTF8String: msg.c_str()];
-                NSString *file = [NSString stringWithUTF8String: info.lineInfo.file.c_str()];
+                NSString *file = [NSString stringWithUTF8String: info.lineInfo.file];
                 
                 [self recordFailureWithDescription: desc inFile: file atLine: info.lineInfo.line expected: expected];
             }
@@ -367,10 +374,8 @@ const void *XCTestRegistryHub::TestSelectorKey = NULL;
 + (void) load {
     using namespace Catch;
     
-    RegistryHub **hub = &getTheRegistryHub();
-    RegistryHub *previous = *hub;
-    *hub = new XCTestRegistryHub();
-    delete previous;
+    // Hack to get xc runer funtionality working with singelton stuff
+    addTestRegistrationListener(new XCTestRegistryHub());
 }
 
 @end

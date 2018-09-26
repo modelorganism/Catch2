@@ -71,6 +71,11 @@ namespace Catch {
             return registerTest( testCase.withName( rss.str() ) );
         }
         m_functions.push_back( testCase );
+        
+        // Inform all listeners of the new test.
+        for(auto regListener: *regListeners) {
+        	regListener->registerTest( testCase );
+        }
     }
 
     std::vector<TestCase> const& TestRegistry::getAllTests() const {

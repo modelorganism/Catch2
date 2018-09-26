@@ -47,6 +47,28 @@ struct AutoReg : NonCopyable {
 
 } // end namespace Catch
 
+namespace Catch {
+    class ITestRegistrationListener {
+    public:
+        virtual void registerTest( Catch::TestCase const& testInfo ) = 0;
+    };
+    
+    extern std::vector<ITestRegistrationListener*> *regListeners;
+    
+    static void addTestRegistrationListener(ITestRegistrationListener* r)
+    {
+        // Creating this manually means we don't need to worry about c++ initialization order.
+        if ( regListeners == nullptr) regListeners = new std::vector<ITestRegistrationListener*>;
+        regListeners->push_back(r);
+    }
+}
+#ifdef  CATCH_CONFIG_RUNNER
+namespace Catch {
+    std::vector<ITestRegistrationListener*>* regListeners=nullptr;
+}
+#endif
+
+
 #define INTERNAL_CATCH_EXPAND1(param) INTERNAL_CATCH_EXPAND2(param)
 #define INTERNAL_CATCH_EXPAND2(...) INTERNAL_CATCH_NO## __VA_ARGS__
 #define INTERNAL_CATCH_DEF(...) INTERNAL_CATCH_DEF __VA_ARGS__
